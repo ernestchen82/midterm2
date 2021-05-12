@@ -20,7 +20,7 @@
 #include "MQTTClient.h"
 WiFiInterface *wifi;
 const char* topic = "Mbed";
-
+//uLCD_4DGL uLCD(D1, D0, D2);
 
 BufferedSerial pc(USBTX, USBRX);
 void capture (Arguments *in, Reply *out);
@@ -36,8 +36,17 @@ EventQueue mqtt_queue;
 constexpr int kTensorArenaSize = 60 * 1024;
 uint8_t tensor_arena[kTensorArenaSize];
 
-int gesture_index;
+int gesture_index = 3;
 int event_count = 0;
+
+/*void ulcd(int degree)
+{
+    uLCD.background_color(0xFFFFFF);
+    uLCD.color(BLUE);
+    uLCD.text_width(2);
+    uLCD.text_height(2);
+    uLCD.printf("%d\n",degree);
+}*/
 
 void messageArrived(MQTT::MessageData& md) {
     MQTT::Message &message = md.message;
@@ -51,21 +60,21 @@ void messageArrived(MQTT::MessageData& md) {
 }
 void publish_choice(MQTT::Client<MQTTNetwork, Countdown>* client)
 {
-  MQTT::Message message;
-  char buff[100];
+  if(gesture_index < 3)
+    {
+      MQTT::Message message;
+      char buff[100];
 
-  message.qos = MQTT::QOS0;
-  message.retained = false;
-  message.dup = false;
-  message.payload = (void*) buff;
-  message.payloadlen = strlen(buff) + 1;
-  
-
-  sprintf(buff, "event: %d  class: %d", event_count, gesture_index);
-  int rc = client->publish(topic, message);
-  printf("Puslish message: %s\r\n", buff);
-	event_count++;
-    
+      message.qos = MQTT::QOS0;
+      message.retained = false;
+      message.dup = false;
+      message.payload = (void*) buff;
+      message.payloadlen = strlen(buff) + 1;
+      sprintf(buff, "event: %d  class: %d", event_count, gesture_index);
+      int rc = client->publish(topic, message);
+      printf("Puslish message: %s\r\n", buff);
+	    event_count++;
+    }
 }
 
 int PredictGesture(float* output) {
@@ -178,8 +187,8 @@ int gestureClassify()
     error_reporter->Report("Set up failed\n");
     return -1;
   }
-
   error_reporter->Report("Set up successful...\n");
+
     while (true) {
 
     // Attempt to read new data from the accelerometer
@@ -202,14 +211,16 @@ int gestureClassify()
 
     // Analyze the results to obtain a prediction
     gesture_index = PredictGesture(interpreter->output(0)->data.f);
+    //ulcd(gesture_index);
 
     // Clear the buffer next time we read data
     should_clear_buffer = gesture_index < label_num;
 
+
     // Produce an output
-    if (gesture_index < label_num) {
+    /*if (gesture_index < label_num) {
       error_reporter->Report(config.output_message[gesture_index]);
-    }
+    }*/
   }
 }
 
@@ -218,6 +229,7 @@ void capture (Arguments *in, Reply *out)
     select_thread.start(callback(&queue, &EventQueue::dispatch_forever));
     publish_thread.start(callback(&publish_queue, &EventQueue::dispatch_forever));
     queue.call(&gestureClassify);
+    printf("classify called");
 }
 
 void connect(void) {
@@ -268,8 +280,10 @@ void connect(void) {
             printf("Fail to subscribe\r\n");
     }
 
-    publish_queue.call(&publish_choice, &client);
-
+    
+    publish_queue.call_every(1000ms, &publish_choice, &client);
+    
+    
     int num = 0;
     while (num != 5) {
             client.yield(100);
